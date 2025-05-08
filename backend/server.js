@@ -7,6 +7,9 @@ const colors = require('colors');
 // Load environment variables
 dotenv.config({ path: './.env' });
 
+// Build MongoDB connection string securely
+const MONGO_URI = `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@thabo4231.6aat015.mongodb.net/${process.env.MONGO_DB_NAME}?retryWrites=true&w=majority&appName=Thabo4231`;
+
 // Initialize Express app
 const app = express();
 
@@ -22,18 +25,13 @@ app.use(cors({
 app.use(express.json());
 
 // Database connection
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  retryWrites: true,
-  w: 'majority'
-})
-.then(() => console.log('MongoDB Connected'.cyan.underline.bold))
-.catch(err => console.error(`MongoDB Connection Error: ${err.message}`.red));
+mongoose.connect(MONGO_URI)
+  .then(() => console.log('MongoDB Connected'.cyan.underline.bold))
+  .catch(err => console.error(`MongoDB Connection Error: ${err.message}`.red));
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
-app.use('/api/queries', require('./routes/queries')); // Assuming queries are modularized
+app.use('/api/queries', require('./routes/queries'));
 app.get('/api/health', (req, res) => {
   res.status(200).json({
     success: true,
