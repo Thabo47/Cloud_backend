@@ -1,11 +1,9 @@
 const express = require("express")
 const cors = require("cors")
-const rateLimit = require("express-rate-limit")
 const dotenv = require("dotenv")
 const mongoose = require("mongoose")
 const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
-const bodyParser = require("body-parser")
 
 dotenv.config()
 const app = express()
@@ -71,21 +69,52 @@ app.use((req, res, next) => {
   next()
 })
 
-// Body parsing middleware
+// Body parsing middleware (using built-in Express parsers)
 app.use(express.json({ limit: "10mb" }))
 app.use(express.urlencoded({ extended: true, limit: "10mb" }))
-app.use(bodyParser.json())
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 60, // 60 requests per minute
-  message: { error: "Too many requests, please try again later" },
-  standardHeaders: true,
-  legacyHeaders: false,
-})
+// Simple rate limiting middleware (custom implementation)
+const requestCounts = new Map()
+const RATE_LIMIT_WINDOW = 60 * 1000 // 1 minute
+const RATE_LIMIT_MAX = 60 // 60 requests per minute
 
-app.use(limiter)
+const simpleRateLimit = (req, res, next) => {
+  const clientIP = req.ip || req.connection.remoteAddress || "unknown"
+  const now = Date.now()
+
+  // Clean old entries
+  for (const [ip, data] of requestCounts.entries()) {
+    if (now - data.firstRequest > RATE_LIMIT_WINDOW) {
+      requestCounts.delete(ip)
+    }
+  }
+
+  // Check current client
+  const clientData = requestCounts.get(clientIP)
+
+  if (!clientData) {
+    requestCounts.set(clientIP, { firstRequest: now, count: 1 })
+    return next()
+  }
+
+  if (now - clientData.firstRequest > RATE_LIMIT_WINDOW) {
+    requestCounts.set(clientIP, { firstRequest: now, count: 1 })
+    return next()
+  }
+
+  clientData.count++
+
+  if (clientData.count > RATE_LIMIT_MAX) {
+    return res.status(429).json({
+      error: "Too many requests, please try again later",
+      retryAfter: Math.ceil((RATE_LIMIT_WINDOW - (now - clientData.firstRequest)) / 1000),
+    })
+  }
+
+  next()
+}
+
+app.use(simpleRateLimit)
 
 // Enhanced logging middleware
 app.use((req, res, next) => {
@@ -291,6 +320,13 @@ app.get("/", (req, res) => {
     version: "1.0.0",
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || "development",
+    dependencies: {
+      express: "✅ Loaded",
+      mongoose: "✅ Loaded",
+      cors: "✅ Loaded",
+      bcryptjs: "✅ Loaded",
+      jsonwebtoken: "✅ Loaded",
+    },
   })
 })
 
@@ -700,4 +736,5 @@ app.listen(PORT, () => {
   console.log(`🔗 Health check: http://localhost:${PORT}/`)
   console.log(`🧪 CORS test: http://localhost:${PORT}/api/cors/test`)
   console.log(`📊 MongoDB: ${process.env.MONGO_URI ? "Connected" : "Local"}`)
+  console.log(`✅ All dependencies loaded successfully!`)
 })
